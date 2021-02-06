@@ -1,0 +1,101 @@
+- hosts: test
+  vars_files:
+    - vars.yml
+  tasks:
+  - name: Mount Directory Creation
+    file:
+      state: directory
+      path: "{{ mount_directory }}"
+
+  - name: Mount Directory to CDROM
+    mount:
+      src: "/dev/cdrom"
+      path: "{{ mount_directory }}"
+      state: mounted
+      fstype: "iso9660"
+
+  - name: YUM Repository - AppStream
+    yum_repository:
+      baseurl: "{{ mount_directory }}/AppStream"
+      name: "DVD1"
+      description: "YUM Repository - AppStream"
+      enabled: true
+      gpgcheck: no
+
+  - name: YUM Repository - BaseOS
+    yum_repository:
+      baseurl: "{{ mount_directory }}/BaseOS"
+      name: "DVD2"
+      description: "YUM Repository - BaseOS"
+      enabled: true
+      gpgcheck: no
+
+  - name: Docker Repository Setup
+    yum_repository:
+      baseurl: https://download.docker.com/linux/centos/7/x86_64/stable/
+      name: "docker"
+      description: "Docker repo"
+      enabled: true
+      gpgcheck: no 
+
+  - name: Setting pip installer
+    package:
+      name: "python36"
+      state: present
+
+  - name: Setting SELinux Permissive
+    selinux:
+      policy: targeted      
+      state: permissive
+
+  - name: Check whether Docker is installed or not
+    command: "rpm -q docker-ce"
+    register: docker_check
+    ignore_errors: yes
+
+  - name: Docker Installation
+    command: "yum install docker-ce --nobest -y"
+    when: '"is not installed" in docker_check.stdout'
+
+  - name: Starting Docker Service
+    systemd:
+      name: "docker"
+      state: started
+
+  - name: Stopping Firewall Service
+    systemd:
+      name: "firewalld"
+      state: stopped
+
+  - name: Installation of Docker SDK for Python for using Docker modules in Ansible
+    pip:
+      name: "docker-py"
+
+  - name: Creation of directory
+    file:
+      path: /root/web_page/
+      state: directory
+
+  - name: Copying the web page to the directory created
+    copy:
+      src: web/index.html
+      dest: /root/web_page/
+
+  - name: Restarting Docker Service
+    systemd:
+      name: "docker"
+      state: restarted
+
+  - name: Creation of Docker container for httpd
+    docker_container:
+      name: httpd_container
+      image: httpd
+      pull: yes
+      detach: yes
+      state: started
+      ports:
+      - "{{ port_number }}:80"
+      volumes: 
+      - /root/web_page/:/usr/local/apache2/htdocs/
+  
+    
